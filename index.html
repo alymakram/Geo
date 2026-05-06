@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Geo Earth 🌎 - Geographic Knowledge Base on Base</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #001f3f 0%, #003366 50%, #001f3f 100%);
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px 0;
+        }
+        .header h1 {
+            font-size: 3em;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .globe-icon {
+            font-size: 60px;
+            margin-bottom: 15px;
+            display: inline-block;
+            animation: spin 10s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: transform 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card h2 {
+            margin-bottom: 20px;
+            color: #4facfe;
+        }
+        input, button {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 12px;
+            font-size: 1em;
+        }
+        input {
+            border: 2px solid rgba(79,172,254,0.3);
+            background: rgba(255,255,255,0.95);
+        }
+        button {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover:not(:disabled) {
+            transform: scale(1.02);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            border-left: 4px solid #4facfe;
+        }
+        .tx-info {
+            margin-top: 15px;
+            font-size: 0.85em;
+            word-break: break-all;
+        }
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 0.85em;
+            border-left: 3px solid #4facfe;
+            z-index: 1000;
+        }
+        .network-badge, .gas-badge {
+            display: inline-block;
+            background: #4facfe;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+        .connect-wallet-btn {
+            background: #00f2fe;
+            color: #001f3f;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .debug {
+            font-size: 0.75em;
+            color: #ccc;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+        @media (max-width: 600px) {
+            .header h1 { font-size: 2em; }
+            .card { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="globe-icon">🌎</div>
+            <h1>Geo Earth</h1>
+            <p>Every query is a Base transaction – low gas!</p>
+            <button id="connectWalletBtn" class="connect-wallet-btn">🔌 Connect Wallet (Base)</button>
+            <div>
+                <span class="network-badge" id="networkStatus">Disconnected</span>
+                <span class="gas-badge" id="gasStatus">⛽ Gas: -- Gwei</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🏙️ City to Country</h2>
+            <input type="text" id="cityInput" placeholder="e.g., London, Tokyo, New York" />
+            <button id="cityBtn" disabled>Discover Country 🌍</button>
+            <div id="cityResult" style="display: none;"></div>
+        </div>
+
+        <div class="card">
+            <h2>🗺️ Country to Capital</h2>
+            <input type="text" id="countryInput" placeholder="e.g., France, Japan, Brazil" />
+            <button id="countryBtn" disabled>Find Capital 🏛️</button>
+            <div id="countryResult" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div class="status" id="status">⚠️ Connect wallet to start</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script>
+        // CONTRACT ADDRESS (your deployed contract)
+        const CONTRACT_ADDRESS = "0x8f9c46c7496430333cd610d56a0f908b3f6962bc";
+        
+        // ABI (full, including view functions)
+        const CONTRACT_ABI = [
+            {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
+            {"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"queryId","type":"uint256"},{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"string","name":"queryType","type":"string"},{"indexed":false,"internalType":"string","name":"query","type":"string"},{"indexed":false,"internalType":"string","name":"result","type":"string"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"GeoQueried","type":"event"},
+            {"inputs":[{"internalType":"string","name":"city","type":"string"},{"internalType":"string","name":"country","type":"string"}],"name":"addCityMapping","outputs":[],"stateMutability":"nonpayable","type":"function"},
+            {"inputs":[{"internalType":"string","name":"country","type":"string"},{"internalType":"string","name":"capital","type":"string"}],"name":"addCountryMapping","outputs":[],"stateMutability":"nonpayable","type":"function"},
+            {"inputs":[{"internalType":"string","name":"city","type":"string"}],"name":"getCountryByCity","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"nonpayable","type":"function"},
+            {"inputs":[{"internalType":"string","name":"country","type":"string"}],"name":"getCapitalByCountry","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"nonpayable","type":"function"},
+            {"inputs":[{"internalType":"uint256","name":"queryId","type":"uint256"}],"name":"getQuery","outputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"string","name":"","type":"string"},{"internalType":"string","name":"","type":"string"},{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+            {"inputs":[],"name":"queryCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+            {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"queries","outputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"string","name":"query","type":"string"},{"internalType":"string","name":"result","type":"string"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"}
+        ];
+
+        let web3, contract, userAccount;
+        let isConnected = false;
+
+        // Base mainnet config
+        const BASE_MAINNET = {
+            chainId: '0x2105',
+            chainName: 'Base Mainnet',
+            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://mainnet.base.org'],
+            blockExplorerUrls: ['https://basescan.org']
+        };
+
+        // Display current gas price
+        async function updateGasPrice() {
+            if (!web3) return;
+            try {
+                const gasPrice = await web3.eth.getGasPrice();
+                const gwei = web3.utils.fromWei(gasPrice, 'gwei');
+                document.getElementById('gasStatus').innerHTML = `⛽ Gas: ${parseFloat(gwei).toFixed(2)} Gwei`;
+            } catch(e) {}
+        }
+
+        async function switchToBase() {
+            if (!window.ethereum) throw new Error('MetaMask not installed');
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x2105' }]
+                });
+            } catch (switchError) {
+                if (switchError.code === 4902) {
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [BASE_MAINNET]
+                    });
+                } else {
+                    throw switchError;
+                }
+            }
+        }
+
+        async function connectWallet() {
+            const statusDiv = document.getElementById('status');
+            const networkSpan = document.getElementById('networkStatus');
+            const cityBtn = document.getElementById('cityBtn');
+            const countryBtn = document.getElementById('countryBtn');
+            
+            try {
+                if (!window.ethereum) {
+                    alert('Please install MetaMask');
+                    return;
+                }
+                
+                statusDiv.innerHTML = '⏳ Connecting to Base...';
+                await switchToBase();
+                
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAccount = accounts[0];
+                web3 = new Web3(window.ethereum);
+                contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+                
+                const chainId = await web3.eth.getChainId();
+                if (chainId !== 8453) throw new Error('Please switch to Base Mainnet');
+                
+                isConnected = true;
+                networkSpan.innerHTML = '✓ Base Mainnet';
+                statusDiv.innerHTML = `✓ ${userAccount.slice(0,6)}...${userAccount.slice(-4)}`;
+                cityBtn.disabled = false;
+                countryBtn.disabled = false;
+                
+                updateGasPrice();
+                setInterval(updateGasPrice, 30000);
+                
+                window.ethereum.on('accountsChanged', (newAccounts) => {
+                    if (newAccounts.length === 0) {
+                        isConnected = false;
+                        networkSpan.innerHTML = 'Disconnected';
+                        statusDiv.innerHTML = '⚠️ Wallet disconnected';
+                        cityBtn.disabled = true;
+                        countryBtn.disabled = true;
+                    } else {
+                        userAccount = newAccounts[0];
+                        statusDiv.innerHTML = `✓ ${userAccount.slice(0,6)}...${userAccount.slice(-4)}`;
+                        cityBtn.disabled = false;
+                        countryBtn.disabled = false;
+                    }
+                });
+                window.ethereum.on('chainChanged', () => window.location.reload());
+                
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerHTML = '❌ ' + error.message;
+                networkSpan.innerHTML = 'Not Connected';
+                cityBtn.disabled = true;
+                countryBtn.disabled = true;
+                isConnected = false;
+            }
+        }
+
+        // Low-gas transaction function
+        async function sendLowGasTransaction(txFunction, params) {
+            if (!isConnected || !contract || !userAccount) {
+                throw new Error('Wallet not connected');
+            }
+            const tx = txFunction(...params);
+            // Estimate gas but cap at 200k
+            let gasEstimate;
+            try {
+                gasEstimate = await tx.estimateGas({ from: userAccount });
+            } catch(e) {
+                gasEstimate = 150000;
+            }
+            const gasLimit = Math.min(Math.floor(gasEstimate * 1.2), 200000);
+            // Get current gas price and set low priority fee
+            const gasPrice = await web3.eth.getGasPrice();
+            const maxFeePerGas = web3.utils.toBN(gasPrice);
+            const maxPriorityFeePerGas = web3.utils.toBN(Math.floor(web3.utils.toBN(gasPrice).toNumber() * 0.1));
+            
+            return tx.send({
+                from: userAccount,
+                gas: gasLimit,
+                maxFeePerGas: maxFeePerGas,
+                maxPriorityFeePerGas: maxPriorityFeePerGas
+            });
+        }
+
+        // Pre-check if city exists (view function, free)
+        async function checkCityExists(city) {
+            if (!contract) return false;
+            try {
+                // We can call getCountryByCity as a call (view) to see what it would return
+                const result = await contract.methods.getCountryByCity(city).call({ from: userAccount });
+                return result && result.length > 0;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        async function getCountry() {
+            const city = document.getElementById('cityInput').value.trim();
+            if (!city) { alert('Enter a city'); return; }
+            const btn = document.getElementById('cityBtn');
+            const resultDiv = document.getElementById('cityResult');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Checking existence...';
+            resultDiv.style.display = 'none';
+            
+            try {
+                // First, free check if city exists
+                const exists = await checkCityExists(city);
+                if (!exists) {
+                    resultDiv.innerHTML = `<div class="result"><h3>❌ City not found</h3><p>We don't have "${city}" in our database yet. Try: London, Tokyo, Paris, etc.</p></div>`;
+                    resultDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = 'Discover Country 🌍';
+                    return;
+                }
+                
+                btn.innerHTML = '⏳ Sending transaction (low gas)...';
+                const tx = await sendLowGasTransaction(contract.methods.getCountryByCity, [city]);
+                
+                // Get result from event or from logs
+                let country = '';
+                if (tx.events && tx.events.GeoQueried) {
+                    country = tx.events.GeoQueried.returnValues.result;
+                } else {
+                    // Fallback: call view again after transaction
+                    country = await contract.methods.getCountryByCity(city).call({ from: userAccount });
+                }
+                
+                const gasUsed = tx.gasUsed || '?';
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <h3>📍 Country</h3>
+                        <p>${country}</p>
+                        <div class="tx-info">
+                            🔗 <a href="https://basescan.org/tx/${tx.transactionHash}" target="_blank">View on BaseScan</a><br>
+                            ⛽ Gas used: ${gasUsed} | Cost: ~${web3.utils.fromWei((gasUsed * (await web3.eth.getGasPrice())).toString(), 'gwei')} Gwei
+                        </div>
+                    </div>`;
+                resultDiv.style.display = 'block';
+                document.getElementById('status').innerHTML = '✓ Query complete!';
+            } catch (err) {
+                console.error(err);
+                resultDiv.innerHTML = `<div class="result"><h3>❌ Error</h3><p>${err.message}</p><div class="debug">Make sure you're on Base Mainnet and have enough ETH for gas.</div></div>`;
+                resultDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Discover Country 🌍';
+            }
+        }
+
+        async function checkCountryExists(country) {
+            if (!contract) return false;
+            try {
+                const result = await contract.methods.getCapitalByCountry(country).call({ from: userAccount });
+                return result && result.length > 0;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        async function getCapital() {
+            const country = document.getElementById('countryInput').value.trim();
+            if (!country) { alert('Enter a country'); return; }
+            const btn = document.getElementById('countryBtn');
+            const resultDiv = document.getElementById('countryResult');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Checking existence...';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const exists = await checkCountryExists(country);
+                if (!exists) {
+                    resultDiv.innerHTML = `<div class="result"><h3>❌ Country not found</h3><p>We don't have "${country}" yet. Try: France, Japan, Brazil, etc.</p></div>`;
+                    resultDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = 'Find Capital 🏛️';
+                    return;
+                }
+                
+                btn.innerHTML = '⏳ Sending transaction (low gas)...';
+                const tx = await sendLowGasTransaction(contract.methods.getCapitalByCountry, [country]);
+                let capital = '';
+                if (tx.events && tx.events.GeoQueried) {
+                    capital = tx.events.GeoQueried.returnValues.result;
+                } else {
+                    capital = await contract.methods.getCapitalByCountry(country).call({ from: userAccount });
+                }
+                
+                const gasUsed = tx.gasUsed || '?';
+                resultDiv.innerHTML = `
+                    <div class="result">
+                        <h3>🏛️ Capital</h3>
+                        <p>${capital}</p>
+                        <div class="tx-info">
+                            🔗 <a href="https://basescan.org/tx/${tx.transactionHash}" target="_blank">View on BaseScan</a><br>
+                            ⛽ Gas used: ${gasUsed} | Cost: ~${web3.utils.fromWei((gasUsed * (await web3.eth.getGasPrice())).toString(), 'gwei')} Gwei
+                        </div>
+                    </div>`;
+                resultDiv.style.display = 'block';
+                document.getElementById('status').innerHTML = '✓ Query complete!';
+            } catch (err) {
+                console.error(err);
+                resultDiv.innerHTML = `<div class="result"><h3>❌ Error</h3><p>${err.message}</p></div>`;
+                resultDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Find Capital 🏛️';
+            }
+        }
+
+        document.getElementById('connectWalletBtn').addEventListener('click', connectWallet);
+        document.getElementById('cityBtn').addEventListener('click', getCountry);
+        document.getElementById('countryBtn').addEventListener('click', getCapital);
+        document.getElementById('cityInput').addEventListener('keypress', (e) => { if(e.key === 'Enter') getCountry(); });
+        document.getElementById('countryInput').addEventListener('keypress', (e) => { if(e.key === 'Enter') getCapital(); });
+        
+        window.addEventListener('load', async () => {
+            if (window.ethereum && window.ethereum.selectedAddress) {
+                await connectWallet();
+            }
+        });
+    </script>
+</body>
+</html>
